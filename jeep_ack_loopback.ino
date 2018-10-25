@@ -1,57 +1,28 @@
 
 // We'll use SoftwareSerial to communicate with the XBee:
 #include <SoftwareSerial.h>
-
-// Commands to interface with the LCD:
-#include <LiquidCrystal.h>
+#include <Wire.h>   // use touchpot to control tests.
 
 SoftwareSerial XBee(2, 3); // RX, TX
 
+/* Touchpot Register definitions
+/* see http://danjuliodesigns.com/products/touch_pot/assets/touch_pot_sf_1_4.pdf */
+#define TOUCHPOT_VERSION       0   // Read only
+#define TOUCHPOT_CUR_POT_VALUE 1   // RW, Current poteniometer value
+#define TOUCHPOT_STATUS        2   // Read only, Device Status
+#define TOUCHPOT_CONTROL       3   // RW, device configuration
+#define TOUCHPOT_USER_LED      4   // RW, user set led value.
 
-/*================
- * LCD CONNECTIONS:
- *   1 to GND
- *   2 to 5V
- *   3 to the center pin on the potentiometer
- *   4 to Arduino digital pin 12
- *   5 to GND
- *   6 to Arduino digital pin 11
- *   7 (no connection)
- *   8 (no connection)
- *   9 (no connection)
- *   10 (no connection)
- *   11 to Arduino  digital pin 5
- *   12 to Arduino  digital pin 4
- *   13 to Arduino  digital pin 3
- *   14 to Arduino  digital pin 2
- *   15 to 5V
- *   16 to GND
- *====================*/
-#define LCD_D7         4 
-#define LCD_D6         5
-#define LCD_D5         6
-#define LCD_D4         7
-#define LCD_ENABLE     8
-#define LCD_REG_SEL    9
+int i2cAddr = 8; // Direct access at i2cAddr, indirect registers at i2cAddr+1
 
-LiquidCrystal lcd(LCD_REG_SEL, LCD_ENABLE, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+// 74595 lines
+#define DATA_PIN  A0
+#define CLK_PIN   A1
+#define LATCH_PIN A2
 
-/******** 
- *  Use these pins to activate the tests below by 
- *  pulling them to ground.  Note all are active low.
- *  Also note that the "Random Data" test is orthoganal to the "Empty Ack" 
- *  and "Wrong Data" pin...it can go in parallel.
- *  If neither "Empty Ack" or "Wrong Ack" is on, we'll do a "correct ack"
- *  (sending 'A', then the received data).
- */
-// Acks just have "A".  No data.
-#define EMPTY_ACK_PIN   13
+// We have 8 output LEDs in our current incarnation.
+#define OUTPUT_LINES 8
 
-// Acks use wrong data...send a '0'
-#define WRONG_ACK_PIN   12
-
-// Send random data intermittently
-#define RANDOM_DATA_PIN 11
 
 void setup()
 {
@@ -59,20 +30,14 @@ void setup()
   // for the XBee. Make sure the baud rate matches the config
   // setting of your XBee.
   XBee.begin(9600);
-
-  pinMode(EMPTY_ACK_PIN, INPUT_PULLUP);
-  pinMode(WRONG_ACK_PIN, INPUT_PULLUP);
-  pinMode(RANDOM_DATA_PIN, INPUT_PULLUP);
+  Wire.begin();
 
   randomSeed(analogRead(0));
   
   Serial.begin(9600);
 
-  Serial.println("XBee Loopback initialized");
+  Serial.println("Jeep ack Loopback initialized");
 
-  lcd.begin(16,2);  // 2 lines of 16 characters.
-  lcd.clear();
-  lcd.print("Init...");
 }
 
 int random_count = 0;
@@ -101,56 +66,14 @@ void random_data_test(void)
 void loop()
 {
   char loopback_char;
-  
-  if (!digitalRead(RANDOM_DATA_PIN))
-  {
-    random_data_test();
 
-    lcd.setCursor(0,0);
-    lcd.print("Random Test ON ");    
-  }
-  else
-  {
-    lcd.setCursor(0,0);
-    lcd.print("Random Test OFF");
-  }
-  
   if (XBee.available())
   { 
     loopback_char = XBee.read();
 
-    if (!digitalRead(EMPTY_ACK_PIN))
-    {
-      XBee.write('A');
-      Serial.println("Empty ack...");
-
-      lcd.setCursor(0,1);
-      lcd.print("Empty Ack ");
-    }
-    else if (!digitalRead(WRONG_ACK_PIN))
-    {
-      XBee.write('A');
-      XBee.write('0');
-      Serial.println("Wrong Ack ");
-      
-      lcd.setCursor(0,1);
-      lcd.print("Wrong Acks");
-    }
-    else
-    {
-       // Correct loopback operation
-       XBee.write('A');
-       XBee.write(loopback_char);
-    
-       Serial.print("Received ");
-       Serial.print(loopback_char);
-       Serial.print(" ---> Send A");
-       Serial.println(loopback_char);
-
-       lcd.setCursor(0,1);
-       lcd.print("loopback ");
-       lcd.print(loopback_char);
-    }
+    // Correct loopback operation
+    Serial.print("Looping back ");
+    Serial.print(loopback_char);
   }
 
 }
